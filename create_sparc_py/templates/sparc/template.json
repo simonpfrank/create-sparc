@@ -1,0 +1,23 @@
+{
+    "name": "SPARC Project",
+    "version": "1.0.0",
+    "description": "A Python project template following the SPARC methodology",
+    "files": [
+        "README.md",
+        "main.py",
+        "setup.py",
+        "requirements.txt",
+        ".gitignore",
+        "docs/PRD.md",
+        "docs/TDD.md",
+        "docs/tracker.md",
+        "src/__init__.py",
+        "src/{{project_name}}/__init__.py",
+        "tests/__init__.py",
+        "tests/test_{{project_name}}.py"
+    ],
+    "variables": {
+        "author": "Create SPARC Py",
+        "license": "MIT"
+    }
+} 

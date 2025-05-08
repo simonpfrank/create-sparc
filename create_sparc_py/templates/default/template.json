@@ -1,0 +1,16 @@
+{
+    "name": "Default Project",
+    "version": "1.0.0",
+    "description": "A minimal Python project template",
+    "files": [
+        "README.md",
+        "main.py",
+        "setup.py",
+        "requirements.txt",
+        ".gitignore"
+    ],
+    "variables": {
+        "author": "Create SPARC Py",
+        "license": "MIT"
+    }
+} 
