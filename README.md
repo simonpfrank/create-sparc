@@ -23,7 +23,7 @@ SPARC is a software development methodology created by Reuven Cohen that focuses
 
 ```bash
 # Install using pip
-pip install create-sparc-py
+# not yet published - pip install create-sparc-py 
 
 # Or install from source
 git clone https://github.com/yourusername/create-sparc-py.git
