@@ -220,3 +220,105 @@ def test_wizard_validate_env_all_present(tmp_path, monkeypatch):
     assert code == 0
     assert "All environment variable references are set" in out or "✅" in out
     assert "Missing environment variables" not in out
+
+
+def test_wizard_auto_fix_security(tmp_path):
+    data = {"mcpServers": {"srvAuto": {"args": ["--token", "hardcodedtoken"], "alwaysAllow": ["*"]}}}
+    mcp = setup_mcp_config(tmp_path, data)
+    code, out = run_cli(["wizard", "audit-security", "--auto-fix"], cwd=tmp_path)
+    assert code == 0
+    assert "Applied" in out or "security fixes" in out
+    # Config file should be auto-fixed
+    with open(mcp) as f:
+        fixed = json.load(f)
+    assert "*" not in fixed["mcpServers"]["srvAuto"]["alwaysAllow"]
+    assert "${env:SRVAUTO_TOKEN}" in fixed["mcpServers"]["srvAuto"]["args"]
+
+
+def test_wizard_detects_dangerous_command(tmp_path):
+    data = {"mcpServers": {"srvDanger": {"command": "rm -rf /home", "args": ["foo"], "alwaysAllow": ["read"]}}}
+    setup_mcp_config(tmp_path, data)
+    code, out = run_cli(["wizard", "validate"], cwd=tmp_path)
+    assert code == 0
+    assert "dangerous command" in out or "Potentially dangerous" in out
+
+
+def test_wizard_detects_high_risk_permissions(tmp_path):
+    data = {"mcpServers": {"srvPerm": {"command": "npx", "args": ["foo"], "alwaysAllow": ["admin", "delete", "read"]}}}
+    setup_mcp_config(tmp_path, data)
+    code, out = run_cli(["wizard", "validate"], cwd=tmp_path)
+    assert code == 0
+    assert "High-risk permissions" in out
+
+
+def test_registry_cli_list(monkeypatch, tmp_path):
+    # Mock RegistryClient.get
+    from create_sparc_py.core import registry_client
+
+    def mock_get(path, **kwargs):
+        return {"items": ["foo", "bar"], "path": path}
+
+    monkeypatch.setattr(registry_client.RegistryClient, "get", mock_get)
+    code, out = run_cli(["registry", "list", "templates"], cwd=tmp_path)
+    assert code == 0
+    assert "foo" in out and "bar" in out
+
+
+def test_registry_cli_get(monkeypatch, tmp_path):
+    from create_sparc_py.core import registry_client
+
+    def mock_get(path, **kwargs):
+        return {"item": path}
+
+    monkeypatch.setattr(registry_client.RegistryClient, "get", mock_get)
+    code, out = run_cli(["registry", "get", "some/path"], cwd=tmp_path)
+    assert code == 0
+    assert "some/path" in out
+
+
+def test_registry_cli_post(monkeypatch, tmp_path):
+    from create_sparc_py.core import registry_client
+
+    def mock_post(path, data, **kwargs):
+        return {"posted": True, "path": path, "data": data}
+
+    monkeypatch.setattr(registry_client.RegistryClient, "post", mock_post)
+    code, out = run_cli(["registry", "post", "foo/bar", '{"x":1}'], cwd=tmp_path)
+    assert code == 0
+    assert "posted" in out and "foo/bar" in out
+
+
+def test_registry_cli_auth(monkeypatch, tmp_path):
+    from create_sparc_py.core import registry_client
+
+    def mock_authenticate(self, creds, **kwargs):
+        return creds.get("api_key") == "good"
+
+    monkeypatch.setattr(registry_client.RegistryClient, "authenticate", mock_authenticate)
+    code, out = run_cli(["registry", "auth", "good"], cwd=tmp_path)
+    assert code == 0
+    assert "Authenticated successfully" in out
+    code2, out2 = run_cli(["registry", "auth", "bad"], cwd=tmp_path)
+    assert code2 == 0
+    assert "Authentication failed" in out2
+
+
+def test_markdown_help_for_all_commands():
+    commands = [
+        ("init", "create-sparc-py init"),
+        ("add", "create-sparc-py add"),
+        ("wizard", "MCP Configuration Wizard"),
+        ("configure-mcp", "configure Multi-Cloud Provider"),
+        ("aigi", "create-sparc-py aigi"),
+        ("minimal", "minimal Roo mode framework"),
+        ("registry", "remote template and component registry"),
+    ]
+    for cmd, expected in commands:
+        # Test 'help <command>'
+        code, out = run_cli(["help", cmd])
+        assert code == 0, f"help {cmd} failed: {out}"
+        assert expected.lower() in out.lower(), f"Expected '{expected}' in help {cmd} output: {out}"
+        # Test '<command> --help'
+        code, out = run_cli([cmd, "--help"])
+        assert code == 0, f"{cmd} --help failed: {out}"
+        assert expected.lower() in out.lower(), f"Expected '{expected}' in {cmd} --help output: {out}"

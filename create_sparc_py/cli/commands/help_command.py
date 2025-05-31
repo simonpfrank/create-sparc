@@ -4,10 +4,10 @@ Enhanced implementation for the help command.
 
 import argparse
 from typing import Any
-from create_sparc_py.cli import _create_parser
 from .help_markdown import get_help_markdown
 from rich.console import Console
 from rich.markdown import Markdown
+from create_sparc_py.cli.parser_factory import create_parser
 
 
 def run(args: Any) -> int:
@@ -20,7 +20,7 @@ def run(args: Any) -> int:
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
-    parser = _create_parser()
+    parser = create_parser()
     if getattr(args, "command", None):
         command = args.command
         # Try to print the markdown help for the command

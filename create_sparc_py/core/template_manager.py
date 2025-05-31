@@ -136,7 +136,9 @@ class TemplateManager:
             logger.error(str(e))
             return False
 
-    def apply_template(self, template_name: str, project_name: str, output_dir: Path) -> bool:
+    def apply_template(
+        self, template_name: str, project_name: str, output_dir: Path, extra_vars: Optional[dict] = None
+    ) -> bool:
         """
         Apply a template to generate a new project.
 
@@ -144,6 +146,7 @@ class TemplateManager:
             template_name: Name of the template
             project_name: Name of the new project
             output_dir: Directory to create the project in
+            extra_vars: Additional variables to use in template rendering
 
         Returns:
             True if the template was applied successfully, False otherwise
@@ -156,6 +159,25 @@ class TemplateManager:
             # Get template info
             template_info = self.get_template_info(template_name)
 
+            # Collect variables
+            variables = {
+                "project_name": project_name,
+                "project_description": template_info.get("description", ""),
+                "template_name": template_info.get("name", ""),
+                "template_version": template_info.get("version", ""),
+            }
+            if "variables" in template_info:
+                variables.update(template_info["variables"])
+            if extra_vars:
+                variables.update(extra_vars)
+
+            # Validate required variables
+            required_vars = template_info.get("required_variables", [])
+            missing_vars = [v for v in required_vars if v not in variables or variables[v] == ""]
+            if missing_vars:
+                logger.error(f"Missing required template variables: {missing_vars}")
+                return False
+
             # Create output directory if it doesn't exist
             if not fs_utils.exists(output_dir):
                 logger.info(f"Creating output directory: {output_dir}")
@@ -164,21 +186,20 @@ class TemplateManager:
             template_dir = self.templates_dir / template_name
             files_field = template_info["files"]
             if isinstance(files_field, list):
-                # Copy each file listed in template.json
+                # Copy and render each file listed in template.json
                 for rel_path in files_field:
                     src = template_dir / rel_path
-                    dest = output_dir / rel_path
+                    # Render the destination filename using Jinja2
+                    dest_rel_path = self.render_template(str(rel_path), variables, strict=False)
+                    dest = output_dir / dest_rel_path
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    fs_utils.copy_file(src, dest)
-                # Apply template variables
-                self._apply_template_variables(output_dir, project_name, template_info)
+                    self._copy_and_render_file(src, dest, variables)
                 return True
             else:
                 # Fallback to old behavior
                 files_dir = template_dir / "files"
                 logger.info(f"Copying template files to: {output_dir}")
-                self._copy_template_files(files_dir, output_dir, project_name, template_info)
-                self._apply_template_variables(output_dir, project_name, template_info)
+                self._copy_template_files(files_dir, output_dir, project_name, template_info, variables)
                 return True
         except Exception as e:
             logger.error(f"Error applying template: {e}")
@@ -188,114 +209,72 @@ class TemplateManager:
                 traceback.print_exc()
             return False
 
+    def _copy_and_render_file(self, src: Path, dest: Path, variables: dict) -> None:
+        """
+        Copy a file from src to dest, rendering it with Jinja2 if it's a text file.
+        """
+        text_extensions = [".txt", ".md", ".py", ".js", ".html", ".css", ".json", ".yaml", ".yml"]
+        if any(str(src).endswith(ext) for ext in text_extensions):
+            try:
+                content = fs_utils.read_file(src)
+                rendered = self.render_template(content, variables, strict=False)
+                fs_utils.write_file(dest, rendered)
+            except Exception as e:
+                logger.warning(f"Error rendering template file {src}: {e}")
+                fs_utils.copy_file(src, dest)
+        else:
+            fs_utils.copy_file(src, dest)
+
     def _copy_template_files(
         self,
         source_dir: Path,
         dest_dir: Path,
         project_name: str,
-        template_info: Dict[str, Any],
+        template_info: dict,
+        variables: dict,
     ) -> None:
         """
-        Copy template files to the output directory.
-
-        Args:
-            source_dir: Source directory containing template files
-            dest_dir: Destination directory for the new project
-            project_name: Name of the new project
-            template_info: Template information
+        Copy template files to the output directory, rendering with Jinja2 if text file.
         """
-        # Copy all files and directories from source_dir to dest_dir
         for item in fs_utils.list_dir(source_dir):
             rel_path = path_utils.get_relative_path(item, source_dir)
-            dest_path = dest_dir / rel_path
-
+            # Render the destination filename using Jinja2
+            dest_path_str = self.render_template(str(rel_path), variables, strict=False)
+            dest_path = dest_dir / dest_path_str
             if fs_utils.is_directory(item):
                 fs_utils.create_dir(dest_path)
-                self._copy_template_files(item, dest_path, project_name, template_info)
+                self._copy_template_files(item, dest_path, project_name, template_info, variables)
             elif fs_utils.is_file(item):
-                # Process file name (replace variables)
-                dest_path_str = str(dest_path)
-                dest_path_str = dest_path_str.replace("{{project_name}}", project_name)
-                dest_path = Path(dest_path_str)
+                self._copy_and_render_file(item, dest_path, variables)
 
-                # Copy the file
-                fs_utils.copy_file(item, dest_path)
-
-    def _apply_template_variables(self, output_dir: Path, project_name: str, template_info: Dict[str, Any]) -> None:
-        """
-        Apply template variables to files in the output directory.
-
-        Args:
-            output_dir: Output directory containing the new project
-            project_name: Name of the new project
-            template_info: Template information
-        """
-        # Get variables to replace
-        variables = {
-            "{{project_name}}": project_name,
-            "{{project_description}}": template_info.get("description", ""),
-            "{{template_name}}": template_info.get("name", ""),
-            "{{template_version}}": template_info.get("version", ""),
-        }
-
-        # Add custom variables from template.json
-        if "variables" in template_info:
-            for key, value in template_info["variables"].items():
-                variables[f"{{{{{key}}}}}"] = value
-
-        # Process text files
-        text_extensions = [
-            ".txt",
-            ".md",
-            ".py",
-            ".js",
-            ".html",
-            ".css",
-            ".json",
-            ".yaml",
-            ".yml",
-        ]
-        for root, _, files in os.walk(output_dir):
-            for filename in files:
-                file_path = Path(root) / filename
-                if any(str(file_path).endswith(ext) for ext in text_extensions):
-                    self._replace_variables_in_file(file_path, variables)
-
-    def _replace_variables_in_file(self, file_path: Path, variables: Dict[str, str]) -> None:
-        """
-        Replace variables in a file.
-
-        Args:
-            file_path: Path to the file
-            variables: Dictionary of variables to replace
-        """
-        try:
-            content = fs_utils.read_file(file_path)
-
-            # Replace variables
-            for var, value in variables.items():
-                content = content.replace(var, value)
-
-            # Write updated content
-            fs_utils.write_file(file_path, content)
-        except Exception as e:
-            logger.warning(f"Error processing variables in {file_path}: {e}")
-
-    def render_template(self, template_str: str, context: dict) -> str:
+    def render_template(self, template_str: str, context: dict, strict: bool = True) -> str:
         """
         Render a template string using Jinja2 with the provided context.
-
-        Args:
-            template_str: The template string to render
-            context: Dictionary of variables for template rendering
-
-        Returns:
-            Rendered string
+        If strict is True, use StrictUndefined (error on missing variables).
+        If strict is False, use default Undefined (allows default filter, missing vars render as empty string or None).
+        For file rendering, missing variables are set to None so Jinja2 logic works as expected.
         """
-        from jinja2 import Template
+        from jinja2 import Template, StrictUndefined, Undefined, meta, Environment
 
-        template = Template(template_str)
-        return template.render(**context)
+        try:
+            undefined_type = StrictUndefined if strict else Undefined
+            if not strict:
+                # Pre-populate context with all variables referenced in the template, set missing to None
+                env = Environment()
+                ast = env.parse(template_str)
+                referenced = meta.find_undeclared_variables(ast)
+                context = dict(context)  # copy
+                for var in referenced:
+                    if var not in context:
+                        context[var] = None
+                template = env.from_string(template_str)
+                return template.render(context)
+            else:
+                template = Template(template_str, undefined=undefined_type)
+                return template.render(**context)
+        except Exception as e:
+            logger.warning(f"Jinja2 render error: {e}")
+            return template_str
 
 
 # Create a singleton instance

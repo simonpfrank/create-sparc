@@ -252,3 +252,195 @@ class MCPWizardWorkflow:
                                 results["missingVariables"].append(env_var)
                                 results["valid"] = False
         return results
+
+    def detect_dangerous_command(self, command: str) -> list:
+        """Detect potentially dangerous commands."""
+        issues = []
+        dangerous_commands = ["rm", "sudo", "chmod", "chown", "eval"]
+        if any(cmd in command for cmd in dangerous_commands):
+            issues.append(
+                {
+                    "severity": "critical",
+                    "message": f"Potentially dangerous command: {command}",
+                    "recommendation": "Avoid using system-level commands that could modify the system.",
+                }
+            )
+        if any(x in command for x in ["$", "`", ";"]):
+            issues.append(
+                {
+                    "severity": "critical",
+                    "message": f"Potential command injection vulnerability: {command}",
+                    "recommendation": "Avoid using shell metacharacters in commands.",
+                }
+            )
+        return issues
+
+    def validate_server_id(self, server_id: str) -> dict:
+        if not server_id:
+            return {"valid": False, "error": "Server ID is required"}
+        import re
+
+        if not re.match(r"^[a-zA-Z0-9-_]+$", server_id):
+            return {"valid": False, "error": "Server ID must contain only letters, numbers, hyphens, and underscores"}
+        return {"valid": True}
+
+    def validate_api_key(self, api_key: str) -> dict:
+        if not api_key:
+            return {"valid": False, "error": "API key is required"}
+        if api_key.startswith("${env:") and api_key.endswith("}"):
+            return {"valid": True, "isEnvVar": True}
+        if len(api_key) < 8:
+            return {"valid": False, "error": "API key is too short"}
+        return {
+            "valid": True,
+            "isEnvVar": False,
+            "warning": "Consider using an environment variable reference for security",
+        }
+
+    def validate_permissions(self, permissions, recommended_permissions=None) -> dict:
+        if not isinstance(permissions, list):
+            return {"valid": False, "error": "Permissions must be an array"}
+        if len(permissions) == 0:
+            return {"valid": True, "warning": "No permissions specified. The server may have limited functionality."}
+        if recommended_permissions:
+            extra = [p for p in permissions if p not in recommended_permissions]
+            if extra:
+                return {
+                    "valid": True,
+                    "warning": f"The following permissions are beyond recommended: {', '.join(extra)}",
+                }
+        return {"valid": True}
+
+    def validate_server_config(self, server: dict) -> dict:
+        errors = []
+        if not server.get("command"):
+            errors.append("Server command is required")
+        if not isinstance(server.get("args"), list):
+            errors.append("Server arguments must be an array")
+        sensitive_patterns = [
+            r"^[A-Za-z0-9-_]{20,}$",
+            r"^sk-[A-Za-z0-9]{20,}$",
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        ]
+        import re
+
+        for arg in server.get("args", []):
+            if isinstance(arg, str):
+                for pat in sensitive_patterns:
+                    if re.match(pat, arg) and not arg.startswith("${env:"):
+                        errors.append(
+                            "Potential sensitive information detected in arguments. Use environment variable references instead."
+                        )
+                        break
+        if "alwaysAllow" in server and not isinstance(server["alwaysAllow"], list):
+            errors.append("alwaysAllow must be an array of permission strings")
+        return {"valid": len(errors) == 0, "errors": errors}
+
+    def validate_env_var_reference(self, reference: str) -> dict:
+        import re, os
+
+        env_var_pattern = r"^\${env:([A-Za-z0-9_]+)}$"
+        match = re.match(env_var_pattern, reference)
+        if not match:
+            return {"valid": False, "error": "Invalid environment variable reference format. Use ${env:VARIABLE_NAME}"}
+        var = match.group(1)
+        is_set = var in os.environ
+        return {
+            "valid": True,
+            "variableName": var,
+            "isSet": is_set,
+            "warning": None if is_set else f"Environment variable {var} is not set",
+        }
+
+    def validate_permission_scope(self, always_allow, server_id):
+        issues = []
+        high_risk = [
+            "admin",
+            "delete",
+            "write",
+            "execute",
+            "deploy",
+            "manage",
+            "create",
+            "update",
+            "remove",
+            "modify",
+            "execute_sql",
+            "execute_query",
+        ]
+        if not always_allow or not isinstance(always_allow, list):
+            return issues
+        granted = [p for p in always_allow if any(risk in p for risk in high_risk)]
+        if granted:
+            issues.append(
+                {
+                    "severity": "warning",
+                    "message": f"High-risk permissions granted to server '{server_id}': {', '.join(granted)}",
+                    "recommendation": "Review and limit permissions to only what is necessary",
+                }
+            )
+        if "*" in always_allow:
+            issues.append(
+                {
+                    "severity": "critical",
+                    "message": f"Wildcard permission granted to server '{server_id}'",
+                    "recommendation": "Replace wildcard with specific required permissions",
+                }
+            )
+        if len(always_allow) > 10:
+            issues.append(
+                {
+                    "severity": "info",
+                    "message": f"Server '{server_id}' has a large number of permissions ({len(always_allow)})",
+                    "recommendation": "Review and consolidate permissions where possible",
+                }
+            )
+        return issues
+
+    def secure_configuration(self, config: dict) -> dict:
+        """Auto-fix common security issues in the config."""
+        import copy
+
+        secured = copy.deepcopy(config)
+        applied_fixes = []
+        for server_id, server in secured.get("mcpServers", {}).items():
+            # Remove wildcard permissions
+            if "alwaysAllow" in server and isinstance(server["alwaysAllow"], list):
+                if "*" in server["alwaysAllow"]:
+                    server["alwaysAllow"] = [p for p in server["alwaysAllow"] if p != "*"]
+                    applied_fixes.append(
+                        {
+                            "type": "permission",
+                            "message": f"Removed wildcard permission from server '{server_id}'",
+                            "location": f"mcpServers.{server_id}.alwaysAllow",
+                        }
+                    )
+            # Suggest env var for hardcoded sensitive values
+            args = server.get("args", [])
+            sensitive_patterns = ["token", "key", "secret", "password", "credential", "auth", "access"]
+            for i, arg in enumerate(args):
+                if isinstance(arg, str) and arg.startswith("--"):
+                    param_name = arg[2:]
+                    if i + 1 < len(args):
+                        param_value = args[i + 1]
+                        if any(pat in param_name.lower() for pat in sensitive_patterns):
+                            if isinstance(param_value, str) and "${env:" not in param_value:
+                                env_var = f"{server_id.upper()}_{param_name.upper().replace('-', '_')}"
+                                args[i + 1] = f"${{env:{env_var}}}"
+                                applied_fixes.append(
+                                    {
+                                        "type": "credential",
+                                        "message": f"Replaced hardcoded value for '{param_name}' in server '{server_id}' with env var reference.",
+                                        "location": f"mcpServers.{server_id}.args[{i+1}]",
+                                    }
+                                )
+        return {"securedConfig": secured, "appliedFixes": applied_fixes}
+
+    def calculate_integrity_hash(self, config: dict) -> str:
+        import hashlib, json
+
+        config_str = json.dumps(config, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()
+
+    def verify_integrity(self, config: dict, expected_hash: str) -> bool:
+        return self.calculate_integrity_hash(config) == expected_hash

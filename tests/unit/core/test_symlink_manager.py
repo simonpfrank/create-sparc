@@ -46,3 +46,30 @@ def test_create_symlink_already_exists(tmp_path):
     SymlinkManager.create(target, link)
     with pytest.raises(FileExistsError):
         SymlinkManager.create(target, link)
+
+
+@pytest.mark.skipif(not symlink_supported(), reason="Symlinks not supported or no admin rights.")
+def test_remove_symlink(tmp_path):
+    target = tmp_path / "target.txt"
+    target.write_text("bye")
+    link = tmp_path / "link2.txt"
+    SymlinkManager.create(target, link)
+    assert link.exists()
+    SymlinkManager.remove(link)
+    assert not link.exists()
+    # Removing again should raise
+    with pytest.raises(FileNotFoundError):
+        SymlinkManager.remove(link)
+
+
+@pytest.mark.skipif(not symlink_supported(), reason="Symlinks not supported or no admin rights.")
+def test_readlink_symlink(tmp_path):
+    target = tmp_path / "target2.txt"
+    target.write_text("data")
+    link = tmp_path / "link3.txt"
+    SymlinkManager.create(target, link)
+    resolved = SymlinkManager.readlink(link)
+    assert resolved == target.resolve()
+    # Not a symlink
+    with pytest.raises(FileNotFoundError):
+        SymlinkManager.readlink(target)

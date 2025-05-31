@@ -213,3 +213,116 @@ def test_workflow_validate_env_var_references(tmp_path, monkeypatch):
     assert result3["success"] is True
     assert result3["valid"] is True
     assert result3["missingVariables"] == []
+
+
+def test_detect_dangerous_command():
+    workflow = MCPWizardWorkflow()
+    # Dangerous command
+    issues = workflow.detect_dangerous_command("rm -rf /home")
+    assert any("dangerous" in i["message"] for i in issues)
+    # Command injection
+    issues2 = workflow.detect_dangerous_command("echo $HOME; ls")
+    assert any("injection" in i["message"] for i in issues2)
+    # Safe command
+    issues3 = workflow.detect_dangerous_command("npx foo")
+    assert issues3 == []
+
+
+def test_validate_server_id():
+    workflow = MCPWizardWorkflow()
+    assert workflow.validate_server_id("good-id")["valid"]
+    assert not workflow.validate_server_id("")["valid"]
+    assert not workflow.validate_server_id("bad id!")["valid"]
+
+
+def test_validate_api_key():
+    workflow = MCPWizardWorkflow()
+    assert workflow.validate_api_key("${env:FOO}")["valid"]
+    assert not workflow.validate_api_key("")["valid"]
+    assert not workflow.validate_api_key("short")["valid"]
+    assert workflow.validate_api_key("longapikey123")["valid"]
+
+
+def test_validate_permissions():
+    workflow = MCPWizardWorkflow()
+    assert workflow.validate_permissions(["read", "write"])["valid"]
+    assert not workflow.validate_permissions("notalist")["valid"]
+    assert workflow.validate_permissions([])["valid"]
+    res = workflow.validate_permissions(["read", "foo"], recommended_permissions=["read"])
+    assert "warning" in res
+
+
+def test_validate_server_config():
+    workflow = MCPWizardWorkflow()
+    # Valid config
+    server = {"command": "npx", "args": ["foo"], "alwaysAllow": ["read"]}
+    assert workflow.validate_server_config(server)["valid"]
+    # Missing command
+    bad = {"args": ["foo"]}
+    assert not workflow.validate_server_config(bad)["valid"]
+    # Sensitive arg
+    sens = {"command": "npx", "args": ["sk-12345678901234567890"]}
+    assert not workflow.validate_server_config(sens)["valid"]
+    # alwaysAllow not a list
+    bad2 = {"command": "npx", "args": ["foo"], "alwaysAllow": "read"}
+    assert not workflow.validate_server_config(bad2)["valid"]
+
+
+def test_validate_env_var_reference(monkeypatch):
+    workflow = MCPWizardWorkflow()
+    # Valid and set
+    monkeypatch.setenv("FOO", "bar")
+    ref = "${env:FOO}"
+    res = workflow.validate_env_var_reference(ref)
+    assert res["valid"] and res["isSet"]
+    # Valid but not set
+    ref2 = "${env:NOTSET}"
+    res2 = workflow.validate_env_var_reference(ref2)
+    assert res2["valid"] and not res2["isSet"]
+    # Invalid format
+    bad = "${env:bad"
+    res3 = workflow.validate_env_var_reference(bad)
+    assert not res3["valid"]
+
+
+def test_validate_permission_scope():
+    workflow = MCPWizardWorkflow()
+    # High-risk
+    issues = workflow.validate_permission_scope(["admin", "read"], "srv1")
+    assert any("High-risk" in i["message"] for i in issues)
+    # Wildcard
+    issues2 = workflow.validate_permission_scope(["*"], "srv2")
+    assert any("Wildcard" in i["message"] for i in issues2)
+    # Many permissions
+    many = [f"perm{i}" for i in range(12)]
+    issues3 = workflow.validate_permission_scope(many, "srv3")
+    assert any("large number" in i["message"] for i in issues3)
+    # Safe
+    assert workflow.validate_permission_scope(["read"], "srv4") == []
+
+
+def test_secure_configuration():
+    workflow = MCPWizardWorkflow()
+    config = {"mcpServers": {"srv1": {"args": ["--token", "mysecrettoken"], "alwaysAllow": ["*"]}}}
+    result = workflow.secure_configuration(config)
+    assert "securedConfig" in result
+    assert "appliedFixes" in result
+    # Wildcard removed, token replaced
+    fixes = result["appliedFixes"]
+    assert any("Removed wildcard" in f["message"] for f in fixes)
+    assert any("env var reference" in f["message"] for f in fixes)
+    # The secured config should have no wildcards and token replaced
+    sc = result["securedConfig"]
+    assert "*" not in sc["mcpServers"]["srv1"]["alwaysAllow"]
+    assert "${env:SRV1_TOKEN}" in sc["mcpServers"]["srv1"]["args"]
+
+
+def test_integrity_hash_and_verify():
+    workflow = MCPWizardWorkflow()
+    config = {"foo": 1, "bar": [2, 3]}
+    h = workflow.calculate_integrity_hash(config)
+    assert isinstance(h, str) and len(h) == 64
+    assert workflow.verify_integrity(config, h)
+    # Tamper
+    config2 = {"foo": 2, "bar": [2, 3]}
+    assert not workflow.verify_integrity(config2, h)

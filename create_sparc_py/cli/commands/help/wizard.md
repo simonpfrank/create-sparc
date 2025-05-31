@@ -38,32 +38,65 @@ poetry run create-sparc-py wizard
 
 ### List Configured Servers
 
+List all configured MCP servers:
+
 ```
 poetry run create-sparc-py wizard --list
 ```
 
 ### Add a Server
 
+Add a specific MCP server interactively:
+
 ```
 poetry run create-sparc-py wizard --add openai
-poetry run create-sparc-py wizard --add openai --no-interactive --api-key "${env:OPENAI_API_KEY}" --region us-east-1 --permissions read,write --model gpt-4 --timeout 30
+```
+
+Add a server non-interactively with all parameters:
+
+```
+poetry run create-sparc-py wizard --add openai --no-interactive \
+  --api-key "${env:OPENAI_API_KEY}" \
+  --region us-east-1 \
+  --permissions read,write \
+  --model gpt-4 \
+  --timeout 30
 ```
 
 ### Update a Server
 
+Update an existing MCP server configuration interactively:
+
 ```
 poetry run create-sparc-py wizard --update openai
-poetry run create-sparc-py wizard --update openai --no-interactive --api-key "${env:OPENAI_API_KEY}" --region eu-west-1 --permissions read,write,delete
+```
+
+Update a server non-interactively:
+
+```
+poetry run create-sparc-py wizard --update openai --no-interactive \
+  --api-key "${env:OPENAI_API_KEY}" \
+  --region eu-west-1 \
+  --permissions read,write,delete
 ```
 
 ### Remove a Server
 
+Remove a configured MCP server interactively:
+
 ```
 poetry run create-sparc-py wizard --remove openai
+```
+
+Remove a server non-interactively (without confirmation):
+
+```
 poetry run create-sparc-py wizard --remove openai --no-interactive
 ```
 
 ### Validate Configuration
+
+Validate the MCP configuration:
 
 ```
 poetry run create-sparc-py wizard --validate
@@ -71,11 +104,15 @@ poetry run create-sparc-py wizard --validate
 
 ### Debug Mode
 
+Run any command with debug output:
+
 ```
 poetry run create-sparc-py wizard --list --debug
 ```
 
 ### Custom Configuration Paths
+
+Use custom paths for configuration files:
 
 ```
 poetry run create-sparc-py wizard --add openai --config-path custom/path/mcp.json --roomodes-path custom/path/roomodes
@@ -92,6 +129,8 @@ export OPENAI_API_KEY=your_api_key_here
 ```
 
 ## Configuration Files
+
+The wizard manages two main configuration files:
 
 - `.roo/mcp.json` - Contains MCP server configurations
 - `.roomodes` - Contains roomode definitions for MCP servers

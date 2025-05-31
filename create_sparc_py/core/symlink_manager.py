@@ -35,3 +35,24 @@ class SymlinkManager:
         Check if the given path is a symbolic link.
         """
         return Path(path).is_symlink()
+
+    @staticmethod
+    def remove(link_name: Union[str, Path]) -> None:
+        """
+        Remove a symbolic link at link_name. Raises FileNotFoundError if not a symlink.
+        """
+        link_name = Path(link_name)
+        if not link_name.is_symlink():
+            raise FileNotFoundError(f"No symlink at: {link_name}")
+        link_name.unlink()
+
+    @staticmethod
+    def readlink(link_name: Union[str, Path]) -> Path:
+        """
+        Return the target of the symbolic link at link_name.
+        Raises FileNotFoundError if not a symlink.
+        """
+        link_name = Path(link_name)
+        if not link_name.is_symlink():
+            raise FileNotFoundError(f"No symlink at: {link_name}")
+        return link_name.resolve()

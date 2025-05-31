@@ -39,13 +39,9 @@ class TestTemplateManager(unittest.TestCase):
         template_json_path = self.test_template_dir / "template.json"
         fs_utils.write_file(template_json_path, json.dumps(self.template_json))
 
-        # Create template files directory
-        self.files_dir = self.test_template_dir / "files"
-        fs_utils.create_dir(self.files_dir)
-
-        # Create some template files
+        # Create template files in the template root (not in 'files/')
         readme_content = "# {{project_name}}\n\nBy {{author}}\n\n{{project_description}}"
-        fs_utils.write_file(self.files_dir / "README.md", readme_content)
+        fs_utils.write_file(self.test_template_dir / "README.md", readme_content)
 
         index_content = """#!/usr/bin/env python
 # {{project_name}}
@@ -58,11 +54,13 @@ def main():
 if __name__ == "__main__":
     main()
 """
-        fs_utils.write_file(self.files_dir / "index.py", index_content)
+        fs_utils.write_file(self.test_template_dir / "index.py", index_content)
 
         # Create a file with project name in the filename
         config_content = '{"name": "{{project_name}}"}'
-        fs_utils.write_file(self.files_dir / "{{project_name}}.json", config_content)
+        fs_utils.write_file(self.test_template_dir / "{{project_name}}.json", config_content)
+        self.template_json["files"].append("{{project_name}}.json")
+        fs_utils.write_file(template_json_path, json.dumps(self.template_json))
 
         # Initialize TemplateManager with the test templates directory
         self.template_manager = TemplateManager(self.templates_dir)
@@ -130,7 +128,7 @@ if __name__ == "__main__":
         )
         self.assertFalse(self.template_manager.validate_template(missing_fields_template))
 
-        # Test with a template missing files directory
+        # Test with a template missing files directory (should be valid if files is an empty list)
         missing_files_template = "missing_files_template"
         missing_files_dir = self.templates_dir / missing_files_template
         fs_utils.create_dir(missing_files_dir)
@@ -145,7 +143,7 @@ if __name__ == "__main__":
                 }
             ),
         )
-        self.assertFalse(self.template_manager.validate_template(missing_files_template))
+        self.assertTrue(self.template_manager.validate_template(missing_files_template))
 
     def test_apply_template(self):
         """Test applying a template."""
@@ -186,57 +184,21 @@ if __name__ == "__main__":
         project_name = "test_copy"
         dest_dir = self.output_dir / project_name
         fs_utils.create_dir(dest_dir)
-
+        variables = {
+            "project_name": project_name,
+            "project_description": self.template_json.get("description", ""),
+            "template_name": self.template_json.get("name", ""),
+            "template_version": self.template_json.get("version", ""),
+            **self.template_json.get("variables", {}),
+        }
         # Call the internal method directly
-        self.template_manager._copy_template_files(self.files_dir, dest_dir, project_name, self.template_json)
-
+        self.template_manager._copy_template_files(
+            self.test_template_dir, dest_dir, project_name, self.template_json, variables
+        )
         # Check that files were copied
         self.assertTrue(fs_utils.exists(dest_dir / "README.md"))
         self.assertTrue(fs_utils.exists(dest_dir / "index.py"))
         self.assertTrue(fs_utils.exists(dest_dir / f"{project_name}.json"))
-
-    def test_apply_template_variables(self):
-        """Test applying template variables to files."""
-        project_name = "test_variables"
-        dest_dir = self.output_dir / project_name
-        fs_utils.create_dir(dest_dir)
-
-        # Copy some files to the destination directory
-        fs_utils.write_file(dest_dir / "test.txt", "Project: {{project_name}}, Author: {{author}}")
-        fs_utils.write_file(dest_dir / "test.py", "# {{project_description}}")
-
-        # Apply variables
-        self.template_manager._apply_template_variables(dest_dir, project_name, self.template_json)
-
-        # Check that variables were replaced
-        txt_content = fs_utils.read_file(dest_dir / "test.txt")
-        self.assertIn(project_name, txt_content)
-        self.assertIn(self.template_json["variables"]["author"], txt_content)
-
-        py_content = fs_utils.read_file(dest_dir / "test.py")
-        self.assertIn(self.template_json["description"], py_content)
-
-    def test_replace_variables_in_file(self):
-        """Test replacing variables in a file."""
-        test_file = self.output_dir / "test_replace.txt"
-        content = "Project: {{project_name}}, Version: {{template_version}}"
-        fs_utils.write_file(test_file, content)
-
-        variables = {
-            "{{project_name}}": "test_project",
-            "{{template_version}}": "1.0.0",
-        }
-
-        # Replace variables
-        self.template_manager._replace_variables_in_file(test_file, variables)
-
-        # Check the content
-        replaced_content = fs_utils.read_file(test_file)
-        self.assertEqual("Project: test_project, Version: 1.0.0", replaced_content)
-
-        # Test with a non-existent file (should not raise exception)
-        non_existent = self.output_dir / "non_existent.txt"
-        self.template_manager._replace_variables_in_file(non_existent, variables)
 
     def test_render_template(self):
         """Test the render_template method for variable substitution and logic."""
@@ -256,8 +218,102 @@ if __name__ == "__main__":
         rendered = manager.render_template(template_str, context)
         self.assertEqual(rendered, "User")
 
-        # Missing variable fallback (should render empty string)
+        # Missing variable fallback (should return the original string due to StrictUndefined)
         template_str = "Hello, {{ missing_var }}!"
         context = {}
         rendered = manager.render_template(template_str, context)
-        self.assertEqual(rendered, "Hello, !")
+        self.assertEqual(rendered, "Hello, {{ missing_var }}!")
+
+    def test_apply_template_with_jinja2_logic(self):
+        """Test applying a template with Jinja2 logic in files."""
+        # Add a file with Jinja2 if/else and loop
+        logic_content = """{% if admin %}Admin: {{ user }}{% else %}User: {{ user }}{% endif %}\n{% for i in range(2) %}Item {{ i }} {% endfor %}"""
+        fs_utils.write_file(self.test_template_dir / "logic.md", logic_content)
+        self.template_json["files"].append("logic.md")
+        fs_utils.write_file(self.test_template_dir / "template.json", json.dumps(self.template_json))
+
+        project_name = "jinja2_project"
+        project_dir = self.output_dir / project_name
+        result = self.template_manager.apply_template(
+            self.test_template_name,
+            project_name,
+            project_dir,
+            extra_vars={"admin": True, "user": "Alice", "range": range},
+        )
+        self.assertTrue(result)
+        logic_out = fs_utils.read_file(project_dir / "logic.md")
+        self.assertIn("Admin: Alice", logic_out)
+        self.assertIn("Item 0", logic_out)
+        self.assertIn("Item 1", logic_out)
+
+    def test_apply_template_missing_required_variable(self):
+        """Test that missing required variables cause apply_template to fail."""
+        # Add required_variables to template.json
+        self.template_json["required_variables"] = ["author", "license"]
+        fs_utils.write_file(self.test_template_dir / "template.json", json.dumps(self.template_json))
+        project_name = "missing_var"
+        project_dir = self.output_dir / project_name
+        # Should fail because 'license' is missing
+        result = self.template_manager.apply_template(self.test_template_name, project_name, project_dir)
+        self.assertFalse(result)
+        # Should succeed if all required variables are provided
+        result2 = self.template_manager.apply_template(
+            self.test_template_name, project_name, project_dir, extra_vars={"license": "MIT"}
+        )
+        self.assertTrue(result2)
+
+    def test_apply_template_with_nested_and_defaulted_variables(self):
+        """Test template rendering with nested and defaulted variables."""
+        nested_content = (
+            "Project: {{ project.name | default('NoName') }}\nOwner: {{ owner.name if owner else 'None' }}"
+        )
+        fs_utils.write_file(self.test_template_dir / "nested.md", nested_content)
+        self.template_json["files"].append("nested.md")
+        fs_utils.write_file(self.test_template_dir / "template.json", json.dumps(self.template_json))
+        project_name = "nested_project"
+        project_dir = self.output_dir / project_name
+        # Provide nested variables
+        result = self.template_manager.apply_template(
+            self.test_template_name,
+            project_name,
+            project_dir,
+            extra_vars={"project": {"name": "Deep"}, "owner": {"name": "Bob"}},
+        )
+        self.assertTrue(result)
+        nested_out = fs_utils.read_file(project_dir / "nested.md")
+        self.assertIn("Project: Deep", nested_out)
+        self.assertIn("Owner: Bob", nested_out)
+        # Test default fallback
+        result2 = self.template_manager.apply_template(
+            self.test_template_name, project_name, project_dir, extra_vars={}
+        )
+        self.assertTrue(result2)
+        nested_out2 = fs_utils.read_file(project_dir / "nested.md")
+        self.assertIn("Project: NoName", nested_out2)
+        self.assertIn("Owner: None", nested_out2)
+
+    def test_apply_template_with_invalid_jinja2_syntax(self):
+        """Test that invalid Jinja2 syntax in a template file does not crash apply_template."""
+        bad_content = "{{ this is not valid jinja2 }}"
+        fs_utils.write_file(self.test_template_dir / "bad.md", bad_content)
+        self.template_json["files"].append("bad.md")
+        fs_utils.write_file(self.test_template_dir / "template.json", json.dumps(self.template_json))
+        project_name = "bad_jinja"
+        project_dir = self.output_dir / project_name
+        # Should not raise, but file will be copied as-is
+        result = self.template_manager.apply_template(self.test_template_name, project_name, project_dir)
+        self.assertTrue(result)
+        bad_out = fs_utils.read_file(project_dir / "bad.md")
+        self.assertIn("not valid jinja2", bad_out)
+
+    def test_apply_template_with_empty_file(self):
+        """Test that empty files are handled gracefully."""
+        fs_utils.write_file(self.test_template_dir / "empty.txt", "")
+        self.template_json["files"].append("empty.txt")
+        fs_utils.write_file(self.test_template_dir / "template.json", json.dumps(self.template_json))
+        project_name = "empty_file"
+        project_dir = self.output_dir / project_name
+        result = self.template_manager.apply_template(self.test_template_name, project_name, project_dir)
+        self.assertTrue(result)
+        empty_out = fs_utils.read_file(project_dir / "empty.txt")
+        self.assertEqual(empty_out, "")

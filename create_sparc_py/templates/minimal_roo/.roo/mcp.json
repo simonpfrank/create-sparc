@@ -1,5 +1,24 @@
 {
   "cloud": "aws",
   "region": "us-east-1",
-  "project": "MinimalRooProject"
+  "project": "MinimalRooProject",
+  "mcpServers": {
+    "example-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/mcp-server@latest",
+        "--access-token",
+        "${env:EXAMPLE_ACCESS_TOKEN}"
+      ],
+      "alwaysAllow": [
+        "list_items",
+        "get_item",
+        "create_item"
+      ]
+    },
+    "example-remote-server": {
+      "url": "https://example-mcp-server.com/api/endpoint?token=${env:EXAMPLE_API_TOKEN}"
+    }
+  }
 } 

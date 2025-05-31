@@ -114,7 +114,8 @@ def remove(server_id):
 
 
 @wizard.command("audit-security")
-def audit_security_cmd():
+@click.option("--auto-fix", is_flag=True, help="Automatically fix common security issues in the config.")
+def audit_security_cmd(auto_fix):
     """Run a security audit on the MCP configuration."""
     try:
         cwd = Path.cwd()
@@ -159,6 +160,28 @@ def audit_security_cmd():
                     (console.print(f"[bold]{title}[/bold]") if console else click.echo(title))
                     for step in steps:
                         (console.print(f"- {step}") if console else click.echo(f"- {step}"))
+            if auto_fix and not result["secure"]:
+                # Auto-fix and write config
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                fix_result = workflow.secure_configuration(config)
+                with open(config_path, "w") as f:
+                    json.dump(fix_result["securedConfig"], f, indent=2)
+                fixes = fix_result["appliedFixes"]
+                if fixes:
+                    (
+                        console.print(f"\n[green]🔧 Applied Fixes: {len(fixes)}[/green]")
+                        if console
+                        else click.echo(f"\n🔧 Applied Fixes: {len(fixes)}")
+                    )
+                    for fix in fixes:
+                        (console.print(f"- {fix['message']}") if console else click.echo(f"- {fix['message']}"))
+                else:
+                    (
+                        console.print("[yellow]No fixes were applied.[/yellow]")
+                        if console
+                        else click.echo("No fixes were applied.")
+                    )
         sys.exit(0)
     except Exception as e:
         msg = f"[red]Unexpected error:[/red] {e}" if rich_print else f"Unexpected error: {e}"
