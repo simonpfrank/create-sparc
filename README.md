@@ -1,6 +1,18 @@
 # Create SPARC Py
 
-A Python port of the [create-sparc](https://github.com/ruvnet/rUv-dev) Node.js tool, designed to scaffold Python projects following the SPARC methodology.
+A Python port of the [create-sparc](https://github.com/ruvnet/rUv-dev) Node.js tool by Reuven Cohen, designed to scaffold Python projects instead of JS/TypeScript following the SPARC methodology.
+
+## Caveats/Explanation
+- I'm no rUv
+- I am not a Software Engineer, I code but I'm not a born and bred developer, I was a late starter. The list of what I have to learn is bigger than the things I know.
+- This project is an ongoing experiment in using ChoT/Vibe approaches in Cursor and Roo, very much inspired by the instructional posts by Reuven Cohen (rUv) https://www.linkedin.com/in/reuvencohen/, https://github.com/ruvnet. If you don't follow him (he is also on reddit) you should. He is generous with his techniques and code, which I admire as LinkedIn is full of the opposite.
+- The experiment was to expose the original in Cursor, generate a PRD and then a design document and let Cursor loose until it finished
+- my goals are simple: 
+  - to learn everything I can about agentic subjects by building a low effort agentic framework from scratch (on the third iteration, as I filter complexity vs. robustness)
+  - Use this framework to achieve the highest possible productivity on a personal budget
+  - if it's any good, it's all rUv's design this was originally to see how much Cursor can do without attendance
+
+# Original README
 
 ## What is SPARC?
 
@@ -26,7 +38,7 @@ SPARC is a software development methodology created by Reuven Cohen that focuses
 # not yet published - pip install create-sparc-py 
 
 # Or install from source
-git clone https://github.com/yourusername/create-sparc-py.git
+git clone https://github.com/simonpfrank/create-sparc-py.git
 cd create-sparc-py
 pip install -e .
 ```
@@ -56,8 +68,8 @@ The generated project (using the `sparc` template) follows this structure:
 ```
 /
 ├── docs/               # Documentation
-│   ├── PRD.md          # Product Requirements Document
-│   ├── TDD.md          # Technical Design Document
+│   ├── prd.md          # Product Requirements Document
+│   ├── tdd.md          # Technical Design Document
 │   └── tracker.md      # Progress tracking
 ├── src/                # Source code
 │   └── project_name/   # Main package
@@ -99,7 +111,7 @@ This project is a Python port of the original create-sparc Node.js tool created 
 
 ## Contributing
 
-Contributions to `create-sparc-py` are welcome! Whether you're fixing bugs, improving documentation, or proposing new features, your help is appreciated.
+Contributions to `create-sparc-py` are very welcome! As you can see I have stuff to learn, so davice and guidance or issues are welcome.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)

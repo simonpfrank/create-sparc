@@ -86,9 +86,7 @@ class TemplateManager:
             raise FileNotFoundError(f"Template not found: {template_name}")
 
         if not fs_utils.exists(template_json):
-            raise FileNotFoundError(
-                f"Template configuration not found: {template_json}"
-            )
+            raise FileNotFoundError(f"Template configuration not found: {template_json}")
 
         try:
             template_info = json.loads(fs_utils.read_file(template_json))
@@ -116,21 +114,29 @@ class TemplateManager:
                     logger.error(f"Template is missing required field: {field}")
                     return False
 
-            # Check that files directory exists
+            # Only require 'files' directory if not listing files directly
             template_dir = self.templates_dir / template_name
+            files_field = template_info["files"]
             files_dir = template_dir / "files"
-            if not fs_utils.exists(files_dir):
-                logger.error(f"Template files directory not found: {files_dir}")
-                return False
-
-            return True
+            if isinstance(files_field, list):
+                # Files are listed directly, no need for 'files' dir
+                for rel_path in files_field:
+                    file_path = template_dir / rel_path
+                    if not fs_utils.exists(file_path):
+                        logger.error(f"Template file not found: {file_path}")
+                        return False
+                return True
+            else:
+                # Fallback to old behavior
+                if not fs_utils.exists(files_dir):
+                    logger.error(f"Template files directory not found: {files_dir}")
+                    return False
+                return True
         except (FileNotFoundError, ValueError) as e:
             logger.error(str(e))
             return False
 
-    def apply_template(
-        self, template_name: str, project_name: str, output_dir: Path
-    ) -> bool:
+    def apply_template(self, template_name: str, project_name: str, output_dir: Path) -> bool:
         """
         Apply a template to generate a new project.
 
@@ -155,19 +161,25 @@ class TemplateManager:
                 logger.info(f"Creating output directory: {output_dir}")
                 fs_utils.create_dir(output_dir)
 
-            # Copy template files
             template_dir = self.templates_dir / template_name
-            files_dir = template_dir / "files"
-
-            logger.info(f"Copying template files to: {output_dir}")
-            self._copy_template_files(
-                files_dir, output_dir, project_name, template_info
-            )
-
-            # Apply template variables
-            self._apply_template_variables(output_dir, project_name, template_info)
-
-            return True
+            files_field = template_info["files"]
+            if isinstance(files_field, list):
+                # Copy each file listed in template.json
+                for rel_path in files_field:
+                    src = template_dir / rel_path
+                    dest = output_dir / rel_path
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    fs_utils.copy_file(src, dest)
+                # Apply template variables
+                self._apply_template_variables(output_dir, project_name, template_info)
+                return True
+            else:
+                # Fallback to old behavior
+                files_dir = template_dir / "files"
+                logger.info(f"Copying template files to: {output_dir}")
+                self._copy_template_files(files_dir, output_dir, project_name, template_info)
+                self._apply_template_variables(output_dir, project_name, template_info)
+                return True
         except Exception as e:
             logger.error(f"Error applying template: {e}")
             if logger.get_level() == "debug":
@@ -209,9 +221,7 @@ class TemplateManager:
                 # Copy the file
                 fs_utils.copy_file(item, dest_path)
 
-    def _apply_template_variables(
-        self, output_dir: Path, project_name: str, template_info: Dict[str, Any]
-    ) -> None:
+    def _apply_template_variables(self, output_dir: Path, project_name: str, template_info: Dict[str, Any]) -> None:
         """
         Apply template variables to files in the output directory.
 
@@ -251,9 +261,7 @@ class TemplateManager:
                 if any(str(file_path).endswith(ext) for ext in text_extensions):
                     self._replace_variables_in_file(file_path, variables)
 
-    def _replace_variables_in_file(
-        self, file_path: Path, variables: Dict[str, str]
-    ) -> None:
+    def _replace_variables_in_file(self, file_path: Path, variables: Dict[str, str]) -> None:
         """
         Replace variables in a file.
 
@@ -272,6 +280,22 @@ class TemplateManager:
             fs_utils.write_file(file_path, content)
         except Exception as e:
             logger.warning(f"Error processing variables in {file_path}: {e}")
+
+    def render_template(self, template_str: str, context: dict) -> str:
+        """
+        Render a template string using Jinja2 with the provided context.
+
+        Args:
+            template_str: The template string to render
+            context: Dictionary of variables for template rendering
+
+        Returns:
+            Rendered string
+        """
+        from jinja2 import Template
+
+        template = Template(template_str)
+        return template.render(**context)
 
 
 # Create a singleton instance

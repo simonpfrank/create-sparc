@@ -1,0 +1,18 @@
+{
+  "name": "Minimal Roo Template",
+  "version": "1.0.0",
+  "description": "A minimal template for Roo mode projects, ported from the Node.js version.",
+  "files": [
+    "README.md",
+    ".roo/README.md",
+    ".roo/mcp.json",
+    ".roo/rules/general_guidelines.md",
+    ".roo/rules/orchestration_template.md",
+    ".roo/rules/tool_usage_guidelines.md",
+    ".roo/rules-code/code_guidelines.md",
+    ".roomodes"
+  ],
+  "variables": {
+    "project_name": "MinimalRooProject"
+  }
+} 

@@ -1,0 +1,10 @@
+# .roomodes for Minimal Roo Template
+
+mode: minimal
+rules:
+  - .roo/rules/general_guidelines.md
+  - .roo/rules/orchestration_template.md
+  - .roo/rules/tool_usage_guidelines.md
+  - .roo/rules-code/code_guidelines.md
+
+<!-- Additional content from the Node.js file can be added here as needed. --> 

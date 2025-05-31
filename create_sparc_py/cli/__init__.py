@@ -67,9 +67,7 @@ def _create_parser() -> argparse.ArgumentParser:
     )
 
     # Add global options
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose output"
-    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
 
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
 
@@ -118,11 +116,9 @@ def _add_init_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Template to use (default: 'default')",
     )
 
-    parser.add_argument(
-        "-d", "--directory", help="Directory to create the project in (default: <name>)"
-    )
+    parser.add_argument("-d", "--directory", help="Directory to create the project in (default: <name>)")
 
-    parser.set_defaults(func=init_command.run)
+    parser.set_defaults(func=init_command)
 
 
 def _add_add_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -150,7 +146,7 @@ def _add_add_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Directory to add the component to (default: current directory)",
     )
 
-    parser.set_defaults(func=add_command.run)
+    parser.set_defaults(func=add_command)
 
 
 def _add_help_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -170,7 +166,7 @@ def _add_help_parser(subparsers: argparse._SubParsersAction) -> None:
 
     parser.add_argument("command", nargs="?", help="Command to show help for")
 
-    parser.set_defaults(func=help_command.run)
+    parser.set_defaults(func=help_command)
 
 
 def _add_wizard_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -187,8 +183,12 @@ def _add_wizard_parser(subparsers: argparse._SubParsersAction) -> None:
         "wizard",
         help="Run the project creation wizard",
     )
-
-    parser.set_defaults(func=wizard_command.run)
+    parser.add_argument(
+        "wizard_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments for the wizard subcommands (e.g., list, add, audit-security, etc.)",
+    )
+    parser.set_defaults(func=wizard_command)
 
 
 def _add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -199,14 +199,14 @@ def _add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
         subparsers: Subparsers object to add to
     """
     # Import lazily to avoid circular imports
-    from create_sparc_py.cli.commands import mcp_command
+    from create_sparc_py.cli.commands import configure_mcp_command
 
     parser = subparsers.add_parser(
         "configure-mcp",
         help="Configure MCP settings",
     )
 
-    parser.set_defaults(func=mcp_command.run)
+    parser.set_defaults(func=configure_mcp_command)
 
 
 def _add_aigi_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -226,7 +226,7 @@ def _add_aigi_parser(subparsers: argparse._SubParsersAction) -> None:
 
     parser.add_argument("prompt", help="Prompt for AI code generation")
 
-    parser.set_defaults(func=aigi_command.run)
+    parser.set_defaults(func=aigi_command)
 
 
 def _add_minimal_parser(subparsers: argparse._SubParsersAction) -> None:
@@ -246,11 +246,9 @@ def _add_minimal_parser(subparsers: argparse._SubParsersAction) -> None:
 
     parser.add_argument("name", help="Name of the project to create")
 
-    parser.add_argument(
-        "-d", "--directory", help="Directory to create the project in (default: <name>)"
-    )
+    parser.add_argument("-d", "--directory", help="Directory to create the project in (default: <name>)")
 
-    parser.set_defaults(func=minimal_command.run)
+    parser.set_defaults(func=minimal_command)
 
 
 __all__ = ["run"]

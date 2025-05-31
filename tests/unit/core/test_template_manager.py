@@ -44,9 +44,7 @@ class TestTemplateManager(unittest.TestCase):
         fs_utils.create_dir(self.files_dir)
 
         # Create some template files
-        readme_content = (
-            "# {{project_name}}\n\nBy {{author}}\n\n{{project_description}}"
-        )
+        readme_content = "# {{project_name}}\n\nBy {{author}}\n\n{{project_description}}"
         fs_utils.write_file(self.files_dir / "README.md", readme_content)
 
         index_content = """#!/usr/bin/env python
@@ -97,9 +95,7 @@ if __name__ == "__main__":
         template_info = self.template_manager.get_template_info(self.test_template_name)
         self.assertEqual(self.template_json["name"], template_info["name"])
         self.assertEqual(self.template_json["version"], template_info["version"])
-        self.assertEqual(
-            self.template_json["description"], template_info["description"]
-        )
+        self.assertEqual(self.template_json["description"], template_info["description"])
 
         # Test with a non-existent template
         with self.assertRaises(FileNotFoundError):
@@ -122,9 +118,7 @@ if __name__ == "__main__":
     def test_validate_template(self):
         """Test template validation."""
         # Test with a valid template
-        self.assertTrue(
-            self.template_manager.validate_template(self.test_template_name)
-        )
+        self.assertTrue(self.template_manager.validate_template(self.test_template_name))
 
         # Test with a template missing required fields
         missing_fields_template = "missing_fields_template"
@@ -134,9 +128,7 @@ if __name__ == "__main__":
             missing_fields_dir / "template.json",
             json.dumps({"name": "Missing Fields Template"}),
         )
-        self.assertFalse(
-            self.template_manager.validate_template(missing_fields_template)
-        )
+        self.assertFalse(self.template_manager.validate_template(missing_fields_template))
 
         # Test with a template missing files directory
         missing_files_template = "missing_files_template"
@@ -153,9 +145,7 @@ if __name__ == "__main__":
                 }
             ),
         )
-        self.assertFalse(
-            self.template_manager.validate_template(missing_files_template)
-        )
+        self.assertFalse(self.template_manager.validate_template(missing_files_template))
 
     def test_apply_template(self):
         """Test applying a template."""
@@ -163,9 +153,7 @@ if __name__ == "__main__":
         project_dir = self.output_dir / project_name
 
         # Apply the template
-        result = self.template_manager.apply_template(
-            self.test_template_name, project_name, project_dir
-        )
+        result = self.template_manager.apply_template(self.test_template_name, project_name, project_dir)
         self.assertTrue(result)
 
         # Check that the output directory was created
@@ -190,9 +178,7 @@ if __name__ == "__main__":
         self.assertIn(project_name, config_content)
 
         # Test with a non-existent template
-        result = self.template_manager.apply_template(
-            "non_existent", project_name, project_dir
-        )
+        result = self.template_manager.apply_template("non_existent", project_name, project_dir)
         self.assertFalse(result)
 
     def test_copy_template_files(self):
@@ -202,9 +188,7 @@ if __name__ == "__main__":
         fs_utils.create_dir(dest_dir)
 
         # Call the internal method directly
-        self.template_manager._copy_template_files(
-            self.files_dir, dest_dir, project_name, self.template_json
-        )
+        self.template_manager._copy_template_files(self.files_dir, dest_dir, project_name, self.template_json)
 
         # Check that files were copied
         self.assertTrue(fs_utils.exists(dest_dir / "README.md"))
@@ -218,15 +202,11 @@ if __name__ == "__main__":
         fs_utils.create_dir(dest_dir)
 
         # Copy some files to the destination directory
-        fs_utils.write_file(
-            dest_dir / "test.txt", "Project: {{project_name}}, Author: {{author}}"
-        )
+        fs_utils.write_file(dest_dir / "test.txt", "Project: {{project_name}}, Author: {{author}}")
         fs_utils.write_file(dest_dir / "test.py", "# {{project_description}}")
 
         # Apply variables
-        self.template_manager._apply_template_variables(
-            dest_dir, project_name, self.template_json
-        )
+        self.template_manager._apply_template_variables(dest_dir, project_name, self.template_json)
 
         # Check that variables were replaced
         txt_content = fs_utils.read_file(dest_dir / "test.txt")
@@ -257,3 +237,27 @@ if __name__ == "__main__":
         # Test with a non-existent file (should not raise exception)
         non_existent = self.output_dir / "non_existent.txt"
         self.template_manager._replace_variables_in_file(non_existent, variables)
+
+    def test_render_template(self):
+        """Test the render_template method for variable substitution and logic."""
+        manager = self.template_manager
+        # Simple variable substitution
+        template_str = "Hello, {{ name }}!"
+        context = {"name": "World"}
+        rendered = manager.render_template(template_str, context)
+        self.assertEqual(rendered, "Hello, World!")
+
+        # Conditional logic
+        template_str = "{% if admin %}Admin{% else %}User{% endif %}"
+        context = {"admin": True}
+        rendered = manager.render_template(template_str, context)
+        self.assertEqual(rendered, "Admin")
+        context = {"admin": False}
+        rendered = manager.render_template(template_str, context)
+        self.assertEqual(rendered, "User")
+
+        # Missing variable fallback (should render empty string)
+        template_str = "Hello, {{ missing_var }}!"
+        context = {}
+        rendered = manager.render_template(template_str, context)
+        self.assertEqual(rendered, "Hello, !")

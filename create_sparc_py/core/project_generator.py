@@ -74,21 +74,18 @@ class ProjectGenerator:
                 output_dir = Path(output_dir)
 
             # Apply template
-            logger.info(
-                f"Generating project '{project_name}' using template '{template_name}'"
-            )
-            success = template_manager.apply_template(
-                template_name, project_name, output_dir
-            )
+            logger.info(f"Generating project '{project_name}' using template '{template_name}'")
+            success = template_manager.apply_template(template_name, project_name, output_dir)
 
             if not success:
-                logger.error(
-                    f"Failed to generate project using template: {template_name}"
-                )
+                logger.error(f"Failed to generate project using template: {template_name}")
                 return False
 
             # Additional project setup
             self._setup_additional_components(project_name, output_dir, variables)
+
+            # Post-processing step
+            self.post_process(project_name, output_dir, variables)
 
             return True
 
@@ -122,6 +119,18 @@ class ProjectGenerator:
 
         # For now, just log completion
         logger.info(f"Project '{project_name}' generated successfully in {output_dir}")
+
+    def post_process(self, project_name: str, output_dir: Path, variables: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Perform post-generation steps for the project (stub).
+
+        Args:
+            project_name: Name of the project
+            output_dir: Project directory
+            variables: Additional template variables
+        """
+        # TODO: Implement symlink creation, dependency installation, etc.
+        logger.info(f"Post-processing for project '{project_name}' in {output_dir}")
 
 
 # Create a singleton instance

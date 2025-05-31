@@ -45,9 +45,7 @@ class TestProjectGenerator(unittest.TestCase):
         fs_utils.create_dir(self.files_dir)
 
         # Create some template files
-        readme_content = (
-            "# {{project_name}}\n\nBy {{author}}\n\n{{project_description}}"
-        )
+        readme_content = "# {{project_name}}\n\nBy {{author}}\n\n{{project_description}}"
         fs_utils.write_file(self.files_dir / "README.md", readme_content)
 
         index_content = """#!/usr/bin/env python
@@ -89,15 +87,11 @@ if __name__ == "__main__":
 
         # Assert results
         self.assertTrue(result)
-        mock_template_manager.apply_template.assert_called_once_with(
-            "default", project_name, Path(self.output_dir)
-        )
+        mock_template_manager.apply_template.assert_called_once_with("default", project_name, Path(self.output_dir))
 
     @patch("create_sparc_py.core.project_generator.template_manager")
     @patch("create_sparc_py.core.project_generator.config_manager")
-    def test_generate_project_with_default_template(
-        self, mock_config_manager, mock_template_manager
-    ):
+    def test_generate_project_with_default_template(self, mock_config_manager, mock_template_manager):
         """Test project generation using the default template from config."""
         # Configure mocks
         mock_config_manager.get_default_template.return_value = "default"
@@ -106,22 +100,16 @@ if __name__ == "__main__":
 
         # Generate project without specifying template
         project_name = "test_project"
-        result = self.project_generator.generate_project(
-            project_name=project_name, output_dir=self.output_dir
-        )
+        result = self.project_generator.generate_project(project_name=project_name, output_dir=self.output_dir)
 
         # Assert results
         self.assertTrue(result)
         self.assertEqual(1, mock_config_manager.get_default_template.call_count)
-        mock_template_manager.apply_template.assert_called_once_with(
-            "default", project_name, Path(self.output_dir)
-        )
+        mock_template_manager.apply_template.assert_called_once_with("default", project_name, Path(self.output_dir))
 
     @patch("create_sparc_py.core.project_generator.template_manager")
     @patch("create_sparc_py.core.project_generator.config_manager")
-    def test_generate_project_with_default_output_dir(
-        self, mock_config_manager, mock_template_manager
-    ):
+    def test_generate_project_with_default_output_dir(self, mock_config_manager, mock_template_manager):
         """Test project generation with default output directory."""
         # Configure mocks
         mock_config_manager.get_default_template.return_value = "default"
@@ -134,15 +122,11 @@ if __name__ == "__main__":
 
         # Assert results
         self.assertTrue(result)
-        mock_template_manager.apply_template.assert_called_once_with(
-            "default", project_name, Path(project_name)
-        )
+        mock_template_manager.apply_template.assert_called_once_with("default", project_name, Path(project_name))
 
     @patch("create_sparc_py.core.project_generator.template_manager")
     @patch("create_sparc_py.core.project_generator.config_manager")
-    def test_generate_project_no_templates(
-        self, mock_config_manager, mock_template_manager
-    ):
+    def test_generate_project_no_templates(self, mock_config_manager, mock_template_manager):
         """Test project generation when no templates are available."""
         # Configure mocks
         mock_template_manager.list_templates.return_value = []
@@ -156,17 +140,13 @@ if __name__ == "__main__":
 
     @patch("create_sparc_py.core.project_generator.template_manager")
     @patch("create_sparc_py.core.project_generator.config_manager")
-    def test_generate_project_template_not_found(
-        self, mock_config_manager, mock_template_manager
-    ):
+    def test_generate_project_template_not_found(self, mock_config_manager, mock_template_manager):
         """Test project generation with non-existent template."""
         # Configure mocks
         mock_template_manager.list_templates.return_value = ["default"]
 
         # Attempt to generate project with non-existent template
-        result = self.project_generator.generate_project(
-            project_name="test_project", template_name="non_existent"
-        )
+        result = self.project_generator.generate_project(project_name="test_project", template_name="non_existent")
 
         # Assert results
         self.assertFalse(result)
@@ -174,9 +154,7 @@ if __name__ == "__main__":
 
     @patch("create_sparc_py.core.project_generator.template_manager")
     @patch("create_sparc_py.core.project_generator.config_manager")
-    def test_generate_project_template_error(
-        self, mock_config_manager, mock_template_manager
-    ):
+    def test_generate_project_template_error(self, mock_config_manager, mock_template_manager):
         """Test project generation when template application fails."""
         # Configure mocks
         mock_config_manager.get_default_template.return_value = "default"
@@ -192,9 +170,7 @@ if __name__ == "__main__":
 
     @patch("create_sparc_py.core.project_generator.template_manager")
     @patch("create_sparc_py.core.project_generator.config_manager")
-    def test_setup_additional_components(
-        self, mock_config_manager, mock_template_manager
-    ):
+    def test_setup_additional_components(self, mock_config_manager, mock_template_manager):
         """Test setup of additional components."""
         # For now, this method doesn't do much, so just test that it doesn't raise exceptions
         project_name = "test_project"
@@ -207,10 +183,20 @@ if __name__ == "__main__":
         mock_template_manager.apply_template.return_value = True
 
         # Call generate_project which should call _setup_additional_components
-        result = self.project_generator.generate_project(
-            project_name=project_name, output_dir=output_dir
-        )
+        result = self.project_generator.generate_project(project_name=project_name, output_dir=output_dir)
 
         # Assert results
         self.assertTrue(result)
         mock_template_manager.apply_template.assert_called_once()
+
+    def test_post_process(self):
+        """Test the post_process method (stub)."""
+        generator = self.project_generator
+        project_name = "test_project"
+        output_dir = self.output_dir / project_name
+        fs_utils.create_dir(output_dir)
+        # Should not raise and should log
+        try:
+            generator.post_process(project_name, output_dir)
+        except Exception as e:
+            self.fail(f"post_process raised an exception: {e}")

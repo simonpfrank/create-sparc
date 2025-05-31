@@ -11,6 +11,8 @@ https://github.com/ruvnet/rUv-dev.
 """
 
 import sys
+import os
+import traceback
 from create_sparc_py.cli import run
 
 
@@ -26,8 +28,21 @@ def main() -> int:
     except KeyboardInterrupt:
         print("\nOperation cancelled by user")
         return 1
+    except ImportError as e:
+        print(f"Import Error: {e}", file=sys.stderr)
+        print("This usually means a command module is missing or has import issues.", file=sys.stderr)
+        traceback.print_exc()
+        return 1
+    except AttributeError as e:
+        print(f"Attribute Error: {e}", file=sys.stderr)
+        print("This usually means a function is missing from a command module.", file=sys.stderr)
+        traceback.print_exc()
+        return 1
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        print(f"Error: {e}. {fname}, {exc_tb.tb_lineno}", file=sys.stderr)
+        traceback.print_exc()
         return 1
 
 
