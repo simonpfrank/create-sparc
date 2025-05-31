@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from typing import Union
 
@@ -14,45 +15,51 @@ class SymlinkManager:
         Create a symbolic link pointing to target named link_name.
         Raises FileExistsError if link_name already exists.
         """
-        target = Path(target)
-        link_name = Path(link_name)
-        if link_name.exists() or link_name.is_symlink():
-            raise FileExistsError(f"Link already exists: {link_name}")
-        link_name.parent.mkdir(parents=True, exist_ok=True)
-        link_name.symlink_to(target, target_is_directory=target.is_dir())
+        target = str(target)
+        link_name = str(link_name)
+        try:
+            if os.path.lexists(link_name):
+                os.remove(link_name)
+            os.symlink(target, link_name)
+        except OSError as e:
+            raise RuntimeError(f"Failed to create symlink: {e}")
 
     @staticmethod
     def exists(link_name: Union[str, Path]) -> bool:
         """
         Check if a symbolic link exists at link_name.
         """
-        link_name = Path(link_name)
-        return link_name.is_symlink()
+        link_name = str(link_name)
+        return os.path.islink(link_name)
 
     @staticmethod
     def is_symlink(path: Union[str, Path]) -> bool:
         """
         Check if the given path is a symbolic link.
         """
-        return Path(path).is_symlink()
+        path = str(path)
+        return os.path.islink(path)
 
     @staticmethod
     def remove(link_name: Union[str, Path]) -> None:
         """
         Remove a symbolic link at link_name. Raises FileNotFoundError if not a symlink.
         """
-        link_name = Path(link_name)
-        if not link_name.is_symlink():
-            raise FileNotFoundError(f"No symlink at: {link_name}")
-        link_name.unlink()
+        link_name = str(link_name)
+        try:
+            if os.path.islink(link_name) or os.path.exists(link_name):
+                os.remove(link_name)
+        except OSError as e:
+            raise RuntimeError(f"Failed to remove symlink: {e}")
 
     @staticmethod
-    def readlink(link_name: Union[str, Path]) -> Path:
+    def readlink(link_name: Union[str, Path]) -> str:
         """
         Return the target of the symbolic link at link_name.
         Raises FileNotFoundError if not a symlink.
         """
-        link_name = Path(link_name)
-        if not link_name.is_symlink():
-            raise FileNotFoundError(f"No symlink at: {link_name}")
-        return link_name.resolve()
+        link_name = str(link_name)
+        try:
+            return os.readlink(link_name)
+        except OSError as e:
+            raise RuntimeError(f"Failed to read symlink: {e}")

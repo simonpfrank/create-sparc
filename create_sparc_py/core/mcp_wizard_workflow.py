@@ -3,6 +3,14 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 import shutil
 import datetime
+from .mcp_validation import (
+    validate_server_id,
+    validate_api_key,
+    validate_permissions,
+    validate_server_config,
+    validate_env_var_reference,
+)
+from .mcp_security import MCPSecurity
 
 
 class MCPWizardWorkflow:
@@ -16,6 +24,7 @@ class MCPWizardWorkflow:
         self.roomodes_path = self.project_path / ".roomodes"
         self.registry_url = "https://registry.example.com/api/v1/mcp"  # TODO: Make configurable
         self.cache_enabled = True
+        self.security = MCPSecurity()
         # TODO: Initialize registry client, file manager, config generator, security modules
 
     def initialize(self, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -79,7 +88,7 @@ class MCPWizardWorkflow:
             return {"success": False, "error": str(e)}
 
     def validate_configuration(self) -> Dict[str, Any]:
-        """Validate the MCP configuration file."""
+        """Validate the MCP configuration file using advanced validation logic."""
         try:
             import json
 
@@ -90,14 +99,14 @@ class MCPWizardWorkflow:
             errors = []
             if "mcpServers" not in config or not isinstance(config["mcpServers"], dict):
                 errors.append("Missing or invalid 'mcpServers' key.")
-            # Additional validation can be added here (e.g., check server fields)
             for server_id, server in config.get("mcpServers", {}).items():
-                if not isinstance(server, dict):
-                    errors.append(f"Server '{server_id}' is not a valid object.")
-                # Example: check for required fields
-                for field in ["command", "args", "permissions"]:
-                    if field not in server:
-                        errors.append(f"Server '{server_id}' missing required field: {field}")
+                id_result = validate_server_id(server_id)
+                if not id_result["valid"]:
+                    errors.append(f"Server ID '{server_id}': {id_result['error']}")
+                server_result = validate_server_config(server)
+                if not server_result["valid"]:
+                    for err in server_result["errors"]:
+                        errors.append(f"Server '{server_id}': {err}")
             return {"success": len(errors) == 0, "errors": errors}
         except Exception as e:
             return {"success": False, "errors": [str(e)]}
@@ -153,7 +162,7 @@ class MCPWizardWorkflow:
         return {"success": True}
 
     def audit_security(self, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Perform a security audit on the MCP configuration."""
+        """Perform a security audit on the MCP configuration using MCPSecurity."""
         import json
 
         config = None
@@ -164,60 +173,10 @@ class MCPWizardWorkflow:
                 config = json.load(f)
         except Exception as e:
             return {"success": False, "error": f"Failed to load config: {e}"}
-
-        issues = []
-        recommendations = []
-        secure = True
-        sensitive_patterns = ["token", "key", "secret", "password", "credential", "auth", "access"]
-
-        def is_sensitive(name):
-            return any(pat in name.lower() for pat in sensitive_patterns)
-
-        # Scan each server
-        servers = config.get("mcpServers", {})
-        for server_id, server in servers.items():
-            # Check for hardcoded sensitive values in args
-            args = server.get("args", [])
-            if isinstance(args, list):
-                for i, arg in enumerate(args):
-                    if isinstance(arg, str) and arg.startswith("--"):
-                        param_name = arg[2:]
-                        if i + 1 < len(args):
-                            param_value = args[i + 1]
-                            if is_sensitive(param_name):
-                                if isinstance(param_value, str) and "${env:" not in param_value:
-                                    secure = False
-                                    env_var = f"{server_id.upper()}_{param_name.upper().replace('-', '_')}"
-                                    issues.append(
-                                        {
-                                            "severity": "critical",
-                                            "message": f"Hardcoded sensitive value for '{param_name}' in server '{server_id}'.",
-                                            "recommendation": f"Replace with environment variable reference: ${{env:{env_var}}}",
-                                        }
-                                    )
-            # Check for wildcard permissions
-            always_allow = server.get("alwaysAllow", [])
-            if isinstance(always_allow, list) and "*" in always_allow:
-                secure = False
-                issues.append(
-                    {
-                        "severity": "warning",
-                        "message": f"Wildcard permission '*' found in alwaysAllow for server '{server_id}'.",
-                        "recommendation": "Remove wildcard permissions and specify only required permissions.",
-                    }
-                )
-        if not issues:
-            recommendations.append(
-                {
-                    "title": "Best Practices",
-                    "steps": [
-                        "Use environment variable references (${env:VARNAME}) for all sensitive information.",
-                        "Avoid wildcard permissions in alwaysAllow.",
-                        "Review server arguments for hardcoded secrets.",
-                    ],
-                }
-            )
-        return {"success": True, "secure": secure, "issues": issues, "recommendations": recommendations}
+        results = self.security.audit_configuration(config)
+        # Always return a dict with 'success' key
+        results["success"] = True
+        return results
 
     def validate_env_var_references(self, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Validate environment variable references in the MCP configuration."""
@@ -274,67 +233,6 @@ class MCPWizardWorkflow:
                 }
             )
         return issues
-
-    def validate_server_id(self, server_id: str) -> dict:
-        if not server_id:
-            return {"valid": False, "error": "Server ID is required"}
-        import re
-
-        if not re.match(r"^[a-zA-Z0-9-_]+$", server_id):
-            return {"valid": False, "error": "Server ID must contain only letters, numbers, hyphens, and underscores"}
-        return {"valid": True}
-
-    def validate_api_key(self, api_key: str) -> dict:
-        if not api_key:
-            return {"valid": False, "error": "API key is required"}
-        if api_key.startswith("${env:") and api_key.endswith("}"):
-            return {"valid": True, "isEnvVar": True}
-        if len(api_key) < 8:
-            return {"valid": False, "error": "API key is too short"}
-        return {
-            "valid": True,
-            "isEnvVar": False,
-            "warning": "Consider using an environment variable reference for security",
-        }
-
-    def validate_permissions(self, permissions, recommended_permissions=None) -> dict:
-        if not isinstance(permissions, list):
-            return {"valid": False, "error": "Permissions must be an array"}
-        if len(permissions) == 0:
-            return {"valid": True, "warning": "No permissions specified. The server may have limited functionality."}
-        if recommended_permissions:
-            extra = [p for p in permissions if p not in recommended_permissions]
-            if extra:
-                return {
-                    "valid": True,
-                    "warning": f"The following permissions are beyond recommended: {', '.join(extra)}",
-                }
-        return {"valid": True}
-
-    def validate_server_config(self, server: dict) -> dict:
-        errors = []
-        if not server.get("command"):
-            errors.append("Server command is required")
-        if not isinstance(server.get("args"), list):
-            errors.append("Server arguments must be an array")
-        sensitive_patterns = [
-            r"^[A-Za-z0-9-_]{20,}$",
-            r"^sk-[A-Za-z0-9]{20,}$",
-            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        ]
-        import re
-
-        for arg in server.get("args", []):
-            if isinstance(arg, str):
-                for pat in sensitive_patterns:
-                    if re.match(pat, arg) and not arg.startswith("${env:"):
-                        errors.append(
-                            "Potential sensitive information detected in arguments. Use environment variable references instead."
-                        )
-                        break
-        if "alwaysAllow" in server and not isinstance(server["alwaysAllow"], list):
-            errors.append("alwaysAllow must be an array of permission strings")
-        return {"valid": len(errors) == 0, "errors": errors}
 
     def validate_env_var_reference(self, reference: str) -> dict:
         import re, os

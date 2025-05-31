@@ -108,10 +108,11 @@ def create_parser() -> argparse.ArgumentParser:
     def _add_minimal_args(parser):
         from create_sparc_py.cli.commands import minimal_command
 
+        parser.add_argument("name", help="Name of the minimal Roo project to create")
         parser.add_argument(
-            "minimal_args",
-            nargs=argparse.REMAINDER,
-            help="Arguments for the minimal subcommands (e.g., init, etc.)",
+            "-d",
+            "--directory",
+            help="Directory to create the project in (default: <name>)",
         )
         parser.set_defaults(func=minimal_command)
 

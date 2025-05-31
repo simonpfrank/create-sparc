@@ -232,6 +232,54 @@ def validate_env_cmd():
         sys.exit(1)
 
 
+@wizard.command("validate")
+def validate_cmd():
+    """Validate the MCP configuration and print any errors or security issues."""
+    try:
+        cwd = Path.cwd()
+        config_path = cwd / ".roo" / "mcp.json"
+        print(f"[DEBUG] CWD: {cwd}")
+        print(f"[DEBUG] Looking for config at: {config_path}")
+        workflow = MCPWizardWorkflow(project_path=cwd)
+        result = workflow.validate_configuration()
+        if not result["success"]:
+            msg = f"[red]Error:[/red] {result['errors']}" if rich_print else f"Error: {result['errors']}"
+            (console.print(msg) if console else click.echo(msg))
+        else:
+            if result["errors"]:
+                msg = (
+                    f"[yellow]⚠️ Configuration errors: {len(result['errors'])} issues found[/yellow]"
+                    if rich_print
+                    else f"⚠️ Configuration errors: {len(result['errors'])} issues found"
+                )
+                (console.print(msg) if console else click.echo(msg))
+                for err in result["errors"]:
+                    (console.print(f"- {err}") if console else click.echo(f"- {err}"))
+            else:
+                msg = (
+                    "[green]✅ MCP configuration is valid.[/green]" if rich_print else "✅ MCP configuration is valid."
+                )
+                (console.print(msg) if console else click.echo(msg))
+        # Also run security audit for dangerous commands
+        audit = workflow.audit_security()
+        if audit["issues"]:
+            for issue in audit["issues"]:
+                sev = issue.get("severity", "info").capitalize()
+                color = {"critical": "red", "warning": "yellow", "info": "blue"}.get(
+                    issue.get("severity", "info"), "white"
+                )
+                if rich_print:
+                    msg = f"[{color}]- {sev}: {issue['message']}[/] Recommendation: {issue.get('recommendation', '')}"
+                else:
+                    msg = f"- {sev}: {issue['message']}\n  Recommendation: {issue.get('recommendation', '')}"
+                (console.print(msg) if console else click.echo(msg))
+        sys.exit(0)
+    except Exception as e:
+        msg = f"[red]Unexpected error:[/red] {e}" if rich_print else f"Unexpected error: {e}"
+        (console.print(msg) if console else click.echo(msg))
+        sys.exit(1)
+
+
 def run(args: Any) -> int:
     """
     Run the wizard command (interactive MCP configuration) using click.

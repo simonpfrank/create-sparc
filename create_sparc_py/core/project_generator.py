@@ -73,13 +73,18 @@ class ProjectGenerator:
             else:
                 output_dir = Path(output_dir)
 
+            # Compose context dict for template rendering
+            context = {
+                "project_name": project_name,
+                "template_name": template_name,
+                "output_dir": str(output_dir),
+            }
+            if variables:
+                context.update(variables)
+
             # Apply template
             logger.info(f"Generating project '{project_name}' using template '{template_name}'")
-            success = template_manager.apply_template(template_name, project_name, output_dir)
-
-            if not success:
-                logger.error(f"Failed to generate project using template: {template_name}")
-                return False
+            template_manager.apply_template(template_name, str(output_dir), context)
 
             # Additional project setup
             self._setup_additional_components(project_name, output_dir, variables)
